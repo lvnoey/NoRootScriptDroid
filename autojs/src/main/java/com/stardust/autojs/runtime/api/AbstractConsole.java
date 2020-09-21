@@ -1,10 +1,9 @@
 package com.stardust.autojs.runtime.api;
 
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 import android.util.Log;
 
-import com.stardust.autojs.runtime.ScriptStopException;
-import com.stardust.autojs.runtime.api.Console;
+import com.stardust.autojs.runtime.exception.ScriptException;
 
 /**
  * Created by Stardust on 2017/5/1.
@@ -24,6 +23,12 @@ public abstract class AbstractConsole implements Console {
         return String.format(data.toString(), options);
     }
 
+    @Override
+    public void print(int level, Object data, Object... options) {
+        write(level, format(data, options));
+    }
+
+    protected abstract void write(int level, CharSequence data);
 
     @Override
     public void verbose(@Nullable Object data, Object... options) {
@@ -54,8 +59,9 @@ public abstract class AbstractConsole implements Console {
     public void assertTrue(boolean value, @Nullable Object data, Object... options) {
         if (!value) {
             printf(Log.ASSERT, data, options);
-            throw new ScriptStopException(new AssertionError(format(data, options)));
+            throw new ScriptException(new AssertionError(format(data, options)));
         }
     }
+
 
 }

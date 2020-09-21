@@ -1,267 +1,139 @@
 package com.stardust.pio;
 
-import android.content.Context;
-import android.content.res.AssetManager;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.Charset;
+import java.io.FileFilter;
+import java.io.FilenameFilter;
+import java.net.URI;
+import java.util.ArrayList;
 
 /**
- * Created by Stardust on 2017/4/1.
+ * Created by Stardust on 2017/10/19.
  */
 
-public class PFile {
+public class PFile extends File {
 
-    private static final String TAG = "PFile";
+    private String mSimplifyPath;
+    private String mSimplifiedName;
+    private String mExtension;
 
-    static final int DEFAULT_BUFFER_SIZE = 8192;
-    static final String DEFAULT_ENCODING = Charset.defaultCharset().name();
-
-    public static PFile open(String path, String mode, String encoding, int bufferSize) {
-        switch (mode) {
-            case "r":
-                return new PReadableTextFile(path, encoding, bufferSize);
-            case "w":
-                return new PWritableTextFile(path, encoding, bufferSize, false);
-            case "a":
-                return new PWritableTextFile(path, encoding, bufferSize, true);
-        }
-        return null;
+    public PFile(@NonNull String pathname) {
+        super(pathname);
+        init();
     }
 
-    public static PFile open(String path, String mode, String encoding) {
-        return open(path, mode, encoding, DEFAULT_BUFFER_SIZE);
+    public PFile(String parent, @NonNull String child) {
+        super(parent, child);
+        init();
     }
 
-    public static PFile open(String path, String mode) {
-        return open(path, mode, DEFAULT_ENCODING, DEFAULT_BUFFER_SIZE);
+    public PFile(File parent, @NonNull String child) {
+        super(parent, child);
+        init();
     }
 
-    public static PFile open(String path) {
-        return open(path, "r", DEFAULT_ENCODING, DEFAULT_BUFFER_SIZE);
+    public PFile(@NonNull URI uri) {
+        super(uri);
+        init();
     }
 
 
-    public static boolean createIfNotExists(String path) {
-        ensureDirectory(path);
-        File file = new File(path);
-        if (!file.exists()) {
-            try {
-                return file.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        return false;
-    }
-
-    public static boolean ensureDirectory(String path) {
-        int i = path.lastIndexOf("\\");
-        if (i < 0)
-            i = path.lastIndexOf("/");
-        if (i >= 0) {
-            String folder = path.substring(0, i);
-            File file = new File(folder);
-            if (file.exists())
-                return true;
-            return file.mkdirs();
+    private void init() {
+        if (isDirectory()) {
+            mSimplifiedName = getName();
         } else {
-            return false;
+            mSimplifiedName = PFiles.getNameWithoutExtension(getName());
+        }
+        mSimplifyPath = PFiles.getSimplifiedPath(getPath());
+    }
+
+
+    @NonNull
+    public PFile renameTo(String newName) {
+        PFile newFile = new PFile(getParent(), newName);
+        if (renameTo(newFile)) {
+            return newFile;
+        } else {
+            return this;
         }
     }
 
-    public static String read(String path, String encoding) {
-        return read(new File(path), encoding);
-    }
-
-    public static String read(String path) {
-        return read(new File(path));
-    }
-
-
-    public static String read(File file, String encoding) {
-        try {
-            return read(new FileInputStream(file), encoding);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
+    @NonNull
+    public PFile renameWithoutExt(String newName) {
+        PFile newFile = isDirectory() ? new PFile(getParent(), newName) :
+                new PFile(getParent(), newName + "." + getExtension());
+        if (renameTo(newFile)) {
+            return newFile;
+        } else {
+            return this;
         }
     }
 
-    public static String read(File file) {
-        return read(file, "utf-8");
-    }
-
-    public static String read(InputStream is, String encoding) {
-        try {
-            byte[] bytes = new byte[is.available()];
-            is.read(bytes);
-            return new String(bytes, encoding);
-        } catch (IOException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
+    public String getExtension() {
+        if (mExtension == null) {
+            mExtension = PFiles.getExtension(getName());
         }
+        return mExtension;
     }
 
-    public static String read(InputStream inputStream) {
-        return read(inputStream, "utf-8");
+    public String getSimplifiedPath() {
+        return mSimplifyPath;
     }
 
-    public static boolean copyRaw(Context context, int rawId, String path) {
-        InputStream is = context.getResources().openRawResource(rawId);
-        return copyStream(is, path);
+    @Override
+    public PFile getParentFile() {
+        String p = this.getParent();
+        if (p == null)
+            return null;
+        return new PFile(p);
     }
 
-    public static boolean copyStream(InputStream is, String path) {
-        if (!ensureDirectory(path))
-            return false;
-        File file = new File(path);
-        try {
-            if (!file.exists())
-                if (!file.createNewFile())
-                    return false;
-            FileOutputStream fos = new FileOutputStream(file);
-            return write(is, fos);
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    public static boolean write(InputStream is, OutputStream os) {
-        byte[] buffer = new byte[DEFAULT_BUFFER_SIZE];
-        try {
-            while (is.available() > 0) {
-                int n = is.read(buffer);
-                os.write(buffer, 0, n);
+    @Override
+    public PFile[] listFiles() {
+        String ss[] = list();
+        if (ss == null) return null;
+        ArrayList<PFile> files = new ArrayList<>();
+        for (int i = 0; i < ss.length; i++) {
+            if (!ss[i].startsWith(".")) {
+                files.add(new PFile(this, ss[i]));
             }
-            is.close();
-            os.close();
-            return true;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
         }
+        return files.toArray(new PFile[files.size()]);
     }
 
+    @Override
+    public PFile[] listFiles(FilenameFilter filter) {
+        String ss[] = list();
+        if (ss == null) return null;
+        ArrayList<PFile> files = new ArrayList<>();
+        for (String s : ss)
+            if (!s.startsWith(".") && (filter == null || filter.accept(this, s)))
+                files.add(new PFile(this, s));
+        return files.toArray(new PFile[files.size()]);
+    }
 
-    public static boolean copy(String pathFrom, String pathTo) {
-        try {
-            return copyStream(new FileInputStream(pathFrom), pathTo);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-            return false;
+    @Override
+    public PFile[] listFiles(FileFilter filter) {
+        String ss[] = list();
+        if (ss == null) return null;
+        ArrayList<PFile> files = new ArrayList<>();
+        for (String s : ss) {
+            PFile f = new PFile(this, s);
+            if (!f.isHidden() && (filter == null || filter.accept(f)))
+                files.add(f);
         }
-    }
-
-    public static boolean copyAsset(Context context, String assetFile, String path) {
-        try {
-            return copyStream(context.getAssets().open(assetFile), path);
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    public static String renameWithoutExtension(String path, String newName) {
-        File file = new File(path);
-        File newFile = new File(file.getParent(), newName + getExtension(file.getName()));
-        file.renameTo(newFile);
-        return newFile.getAbsolutePath();
-    }
-
-    public static String getExtension(String fileName) {
-        int i = fileName.lastIndexOf('.');
-        if (i < 0 || i == fileName.length() - 1)
-            return "";
-        return fileName.substring(i);
-    }
-
-    public static boolean write(String path, String text) {
-        return write(new File(path), text);
-    }
-
-    public static boolean write(File file, String text) {
-        try {
-            return write(new FileOutputStream(file), text);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    public static boolean write(OutputStream outputStream, String text) {
-        try {
-            outputStream.write(text.getBytes());
-            return true;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    public static String generateNotExistingPath(String path, String extension) {
-        if (!new File(path + extension).exists())
-            return path + extension;
-        int i = 0;
-        while (true) {
-            String pathI = path + "(" + i + ")" + extension;
-            if (!new File(pathI).exists())
-                return pathI;
-            i++;
-        }
+        return files.toArray(new PFile[files.size()]);
 
     }
 
-    public static String getNameWithoutExtension(String fileName) {
-        int a = fileName.lastIndexOf('/');
-        if (a < 0)
-            a = fileName.lastIndexOf('\\');
-        if (a < 0)
-            a = -1;
-        int b = fileName.indexOf('.', a + 1);
-        if (b < 0)
-            b = fileName.length();
-        fileName = fileName.substring(a + 1, b);
-        return fileName;
+    public String getSimplifiedName() {
+        return mSimplifiedName;
     }
 
-    public static File copyAssetToTmpFile(Context context, String path) {
-        String extension = getExtension(path);
-        String name = getNameWithoutExtension(path);
-        if (name.length() < 5) {
-            name += name.hashCode();
-        }
-        try {
-            File tmpFile = File.createTempFile(name, extension, context.getCacheDir());
-            copyAsset(context, path, tmpFile.getPath());
-            return tmpFile;
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public boolean moveTo(PFile to) {
+        return renameTo(new File(to, getName()));
     }
 
-    public static boolean deleteRecursively(File file) {
-        if (file.isFile())
-            return file.delete();
-        for (File child : file.listFiles()) {
-            if (!deleteRecursively(child))
-                return false;
-        }
-        return file.delete();
-    }
-
-    public static String readAsset(AssetManager assets, String path) {
-        try {
-            return read(assets.open(path));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
 }
